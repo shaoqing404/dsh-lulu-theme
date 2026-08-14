@@ -94,7 +94,8 @@ def main() -> int:
                 (max(1, round(trimmed.width * SMALL_H / trimmed.height)), SMALL_H),
                 Image.LANCZOS,
             )
-            small.save(SMALL / name, optimize=True)
+            webp_name = f"{state}-{col}.webp"
+            small.save(SMALL / webp_name, "WEBP", lossless=False, quality=90, method=6)
             cells[(state, col)] = trimmed
             row_frames.append(trimmed)
             manifest.append({"file": name, "state": state, "col": col, "w": trimmed.width, "h": trimmed.height})
