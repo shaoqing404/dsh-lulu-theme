@@ -2,13 +2,14 @@
 """Build the lulu skin plugin artifacts.
 
 Outputs:
-  plugin/client.js       — canonical single-file skin (frames embedded as base64).
-  plugin/runtime.host.js — Host half that serves frames from disk over RPC.
-  plugin/runtime.client.js — Client half that loads frames via host.call (local quick apply).
+  plugin/client.js          — canonical single-file skin (frames embedded as base64).
+  plugin/runtime.host.js    — Host half that serves frames from disk over RPC.
+  plugin/runtime.client.js  — Client half that loads frames via host.call (local quick apply).
 """
 from __future__ import annotations
 
 import base64
+import json
 import sys
 from pathlib import Path
 
@@ -16,9 +17,269 @@ ROOT = Path(__file__).resolve().parents[1]
 SMALL = ROOT / "assets" / "frames" / "small"
 PLUGIN = ROOT / "plugin"
 
-EMBEDDED = """// 水豚噜噜 · DSH 主题皮肤（build 产物，勿手改 —— 改 scripts/build_plugin.py 后重新构建）
+# ---------------------------------------------------------------------------
+# 主题令牌（基于 DSH body 样式表全量别名令牌 + 真实帧取色校准，2026-08）
+# ---------------------------------------------------------------------------
+
+LULU_LIGHT = {
+    # 背景层级
+    "--dsw-alias-bg-base": "#FFF7E6",
+    "--dsw-alias-bg-layer-1": "#FFFCF4",
+    "--dsw-alias-bg-layer-2": "#F8EDD6",
+    "--dsw-alias-bg-layer-3": "#F3E4C6",
+    "--dsw-alias-bg-primary": "#FFF7E6",
+    "--dsw-alias-bg-overlay": "#FFF8EA",
+    "--dsw-alias-bg-module-platform": "#FBEFD8",
+    "--dsw-alias-bg-multi-select": "#FBEFD8",
+    "--dsw-alias-bg-skeleton": "rgba(43, 33, 24, .06)",
+    "--dsw-alias-bg-mask-1": "rgba(43, 33, 24, .26)",
+    "--dsw-alias-bg-mask-2": "rgba(43, 33, 24, .12)",
+    "--dsw-alias-bg-mask-3": "rgba(43, 33, 24, .48)",
+    "--dsw-alias-bg-mask-photo": "rgba(23, 17, 12, .88)",
+    "--dsw-alias-bg-mask-drop": "rgba(255, 247, 230, .75)",
+    # 描边
+    "--dsw-alias-border-l1": "rgba(122, 84, 36, .16)",
+    "--dsw-alias-border-l2": "rgba(122, 84, 36, .26)",
+    "--dsw-alias-border-l2-darkmode-thin": "rgba(122, 84, 36, .26)",
+    "--dsw-alias-border-l3": "rgba(122, 84, 36, .34)",
+    "--dsw-alias-border-l4": "rgba(122, 84, 36, .46)",
+    "--dsw-alias-border-inverted": "rgba(122, 84, 36, .1)",
+    "--dsw-alias-border-inverted2": "rgba(122, 84, 36, .12)",
+    "--dsw-alias-border-secondary": "rgba(122, 84, 36, .16)",
+    "--dsw-alias-border-subtle": "rgba(122, 84, 36, .1)",
+    "--dsw-alias-line-secondary": "rgba(122, 84, 36, .18)",
+    "--dsw-alias-separator-primary": "rgba(122, 84, 36, .16)",
+    # 品牌与按钮（五大家族全部换装）
+    "--dsw-alias-brand-primary": "#2B2118",
+    "--dsw-alias-brand-primary-invert": "#FFF7E6",
+    "--dsw-alias-brand-primary-new-colorprimary-new-color": "#C96A0B",
+    "--dsw-alias-brand-text": "#2B2118",
+    "--dsw-alias-button-primary-fill": "#2B2118",
+    "--dsw-alias-button-primary-hover": "#4A3A2A",
+    "--dsw-alias-button-primary-dimmed": "#F3E4C6",
+    "--dsw-alias-button-info-fill": "#C96A0B",
+    "--dsw-alias-button-info-hover": "#B85E05",
+    "--dsw-alias-button-contrast-fill": "#2B2118",
+    "--dsw-alias-button-elevated-fill": "#FFFDF6",
+    "--dsw-alias-button-floating-fill": "#FFFDF6",
+    "--dsw-alias-button-floating-hover": "#FBEED9",
+    "--dsw-alias-button-ghost-active-fill": "#F7E3C2",
+    "--dsw-alias-button-ghost-active-hover": "#F9E9CF",
+    "--dsw-alias-button-ghost-active-border": "#C98F3F",
+    "--dsw-alias-button-tool-bar-fill": "rgba(43, 33, 24, .5)",
+    "--dsw-alias-button-tool-bar-fill-invisible": "rgba(43, 33, 24, .36)",
+    "--dsw-alias-button-tool-bar-hover": "rgba(43, 33, 24, .6)",
+    # 交互态（悬停/按下全换成橘子橙的暖色洗染）
+    "--dsw-alias-interactive-bg-hover": "rgba(201, 106, 11, .09)",
+    "--dsw-alias-interactive-bg-active": "rgba(201, 106, 11, .16)",
+    "--dsw-alias-interactive-bg-hover-accent": "rgba(201, 106, 11, .18)",
+    "--dsw-alias-interactive-bg-hover-solid": "#F5E7C8",
+    "--dsw-alias-interactive-bg-hover-danger": "rgba(201, 79, 61, .07)",
+    "--dsw-alias-interactive-bg-primary": "#FBEED9",
+    # 文字（深棕代替纯黑）
+    "--dsw-alias-label-primary": "#2B2118",
+    "--dsw-alias-label-secondary": "#6E5D49",
+    "--dsw-alias-label-tertiary": "#8F7A5E",
+    "--dsw-alias-label-quaternary": "#A08A6A",
+    "--dsw-alias-label-caption": "#A08A6A",
+    "--dsw-alias-label-dimmed": "#C6B28F",
+    "--dsw-alias-label-primary-dimmed": "#241B10",
+    "--dsw-alias-label-primary-bluish": "#3E2E1B",
+    "--dsw-alias-label-primary-foreground": "#FFF6E3",
+    "--dsw-alias-label-primary-inverted": "#FFF6E3",
+    "--dsw-alias-label-inverse": "#FFF7E6",
+    "--dsw-alias-label-error": "#C94F3D",
+    "--dsw-alias-text-primary": "#2B2118",
+    "--dsw-alias-text-tertiary": "#8F7A5E",
+    # 状态色（成功=橘子叶绿）
+    "--dsw-alias-state-business-primary": "#C96A0B",
+    "--dsw-alias-state-business-tertiary": "#F7E3C2",
+    "--dsw-alias-state-error-primary": "#C94F3D",
+    "--dsw-alias-state-error-secondary": "#D96A58",
+    "--dsw-alias-state-success-primary": "#5FA82C",
+    "--dsw-alias-state-success-secondary": "#7DBE4C",
+    "--dsw-alias-state-success-tertiary": "#EAF3DA",
+    "--dsw-alias-state-warn-primary": "#D98E1F",
+    "--dsw-alias-state-warn-secondary": "#E8A94E",
+    "--dsw-alias-state-warn-tertiary": "#F9EBCF",
+    "--dsw-alias-state-warn-label": "#B26A08",
+    # Markdown / 代码块
+    "--dsw-alias-markdown-code-block": "#FFF3DC",
+    "--dsw-alias-markdown-code-block-banner": "#F9E9CF",
+    "--dsw-alias-markdown-inline-code": "#F9E9CF",
+    "--dsw-alias-markdown-code-segment-selected": "#FFFDF6",
+    "--dsw-alias-markdown-code-segment-unselected": "#F5E7C8",
+    "--dsw-alias-markdown-citation": "#F5E7C8",
+    "--dsw-alias-markdown-tag": "#F5E7C8",
+    "--dsw-alias-markdown-placeholder": "#F1E2C4",
+    # 滚动条 / 浮层
+    "--dsw-alias-scrollbar-bg-l1": "#EAD9B8",
+    "--dsw-alias-scrollbar-bg-l2": "#EAD9B8",
+    "--dsw-alias-scrollbar-hover-l1": "#D9BE8E",
+    "--dsw-alias-scrollbar-hover-l2": "#D9BE8E",
+    "--dsw-alias-toast-bg": "#2B2118",
+    "--dsw-alias-tooltip-bg": "#2B2118",
+    # 组件专属
+    "--dsw-specific-sidebar-fill": "#FAF0DC",
+    "--dsw-specific-sidebar-nav-item-active": "#F5E7C8",
+    "--dsw-specific-sidebar-nav-item-active-accent": "#F2B01E",
+    "--dsw-specific-sidebar-nav-item-hover": "#F7EDDA",
+    "--dsw-specific-input-major": "#FFFDF6",
+    "--dsw-specific-login-input": "#FFF9EC",
+    "--dsw-specific-menu": "#FBF1DD",
+    "--dsw-specific-selector": "#F9E9CF",
+    "--dsw-specific-tip": "#FCF3E0",
+    "--dsw-specific-bubble": "#FFF3DC",
+    "--dsw-specific-bubble-highlight": "#F7E3C2",
+    # 阴影（暖棕）
+    "--dsw-shadow-lv1": "0 2px 4px 0 rgba(43, 33, 24, .08)",
+    "--dsw-shadow-lv1-blur": "0 4px 12px 0 rgba(43, 33, 24, .05)",
+    "--dsw-shadow-lv2": "0 4px 12px 0 rgba(43, 33, 24, .06), 0 2px 8px 0 rgba(43, 33, 24, .08)",
+    "--dsw-shadow-lv3": "0 0 1px 0 rgba(43, 33, 24, .22), 0 0 4px 0 rgba(43, 33, 24, .04), 0 12px 32px 0 rgba(43, 33, 24, .14)",
+    # 字体（圆体字，噜噜的圆润感）
+    "--dsw-font-family": '"SF Pro Rounded", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+    # 思考块渐变
+    "--dsw-linear-gradient-think": "linear-gradient(180deg, #FFF3DC 20.19%, rgba(255, 243, 220, 0) 100%)",
+    "--dsw-linear-think-select": "linear-gradient(180deg, #F5E7C8 20.19%, rgba(245, 231, 200, 0) 100%)",
+}
+
+LULU_NIGHT = {
+    # 背景层级
+    "--dsw-alias-bg-base": "#171310",
+    "--dsw-alias-bg-layer-1": "#221C15",
+    "--dsw-alias-bg-layer-2": "#2C241B",
+    "--dsw-alias-bg-layer-3": "#362D21",
+    "--dsw-alias-bg-primary": "#171310",
+    "--dsw-alias-bg-overlay": "#2A231A",
+    "--dsw-alias-bg-module-platform": "#1D1813",
+    "--dsw-alias-bg-multi-select": "#211B15",
+    "--dsw-alias-bg-skeleton": "rgba(255, 241, 208, .08)",
+    "--dsw-alias-bg-mask-1": "rgba(8, 6, 4, .6)",
+    "--dsw-alias-bg-mask-2": "rgba(8, 6, 4, .35)",
+    "--dsw-alias-bg-mask-3": "rgba(8, 6, 4, .6)",
+    "--dsw-alias-bg-mask-photo": "rgba(8, 6, 4, .88)",
+    "--dsw-alias-bg-mask-drop": "rgba(23, 17, 12, .75)",
+    # 描边
+    "--dsw-alias-border-l1": "rgba(255, 241, 208, .1)",
+    "--dsw-alias-border-l2": "rgba(255, 241, 208, .16)",
+    "--dsw-alias-border-l2-darkmode-thin": "rgba(255, 241, 208, .16)",
+    "--dsw-alias-border-l3": "rgba(255, 241, 208, .22)",
+    "--dsw-alias-border-l4": "rgba(255, 241, 208, .3)",
+    "--dsw-alias-border-inverted": "rgba(255, 241, 208, .08)",
+    "--dsw-alias-border-inverted2": "rgba(255, 241, 208, .1)",
+    "--dsw-alias-border-secondary": "rgba(255, 241, 208, .1)",
+    "--dsw-alias-border-subtle": "rgba(255, 241, 208, .08)",
+    "--dsw-alias-line-secondary": "rgba(255, 241, 208, .12)",
+    "--dsw-alias-separator-primary": "rgba(255, 241, 208, .12)",
+    # 品牌与按钮
+    "--dsw-alias-brand-primary": "#FFF1D0",
+    "--dsw-alias-brand-primary-invert": "#171310",
+    "--dsw-alias-brand-primary-new-colorprimary-new-color": "#F2B01E",
+    "--dsw-alias-brand-text": "#FFF1D0",
+    "--dsw-alias-button-primary-fill": "#FFF1D0",
+    "--dsw-alias-button-primary-hover": "#FFE7B3",
+    "--dsw-alias-button-primary-dimmed": "#362D21",
+    "--dsw-alias-button-info-fill": "#F2B01E",
+    "--dsw-alias-button-info-hover": "#F4BB38",
+    "--dsw-alias-button-contrast-fill": "#FFE7B3",
+    "--dsw-alias-button-elevated-fill": "#362D21",
+    "--dsw-alias-button-floating-fill": "#2A231A",
+    "--dsw-alias-button-floating-hover": "#362D21",
+    "--dsw-alias-button-ghost-active-fill": "#362D21",
+    "--dsw-alias-button-ghost-active-hover": "#3E3325",
+    "--dsw-alias-button-ghost-active-border": "#8A764F",
+    "--dsw-alias-button-tool-bar-fill": "rgba(23, 17, 12, .5)",
+    "--dsw-alias-button-tool-bar-fill-invisible": "rgba(23, 17, 12, .36)",
+    "--dsw-alias-button-tool-bar-hover": "rgba(23, 17, 12, .6)",
+    # 交互态
+    "--dsw-alias-interactive-bg-hover": "rgba(242, 176, 30, .1)",
+    "--dsw-alias-interactive-bg-active": "rgba(242, 176, 30, .18)",
+    "--dsw-alias-interactive-bg-hover-accent": "rgba(242, 176, 30, .22)",
+    "--dsw-alias-interactive-bg-hover-solid": "#362D21",
+    "--dsw-alias-interactive-bg-hover-danger": "rgba(226, 109, 92, .14)",
+    "--dsw-alias-interactive-bg-primary": "#2A231A",
+    # 文字
+    "--dsw-alias-label-primary": "#FFF1D0",
+    "--dsw-alias-label-secondary": "#B4A389",
+    "--dsw-alias-label-tertiary": "#8F8068",
+    "--dsw-alias-label-quaternary": "#6B5E4B",
+    "--dsw-alias-label-caption": "#8F8068",
+    "--dsw-alias-label-dimmed": "#5F5444",
+    "--dsw-alias-label-primary-dimmed": "#FFE7B3",
+    "--dsw-alias-label-primary-bluish": "#FFE7B3",
+    "--dsw-alias-label-primary-foreground": "#171310",
+    "--dsw-alias-label-primary-inverted": "#171310",
+    "--dsw-alias-label-inverse": "#171310",
+    "--dsw-alias-label-error": "#E26D5C",
+    "--dsw-alias-text-primary": "#FFF1D0",
+    "--dsw-alias-text-tertiary": "#8F8068",
+    # 状态色
+    "--dsw-alias-state-business-primary": "#F2B01E",
+    "--dsw-alias-state-business-tertiary": "#3A2E14",
+    "--dsw-alias-state-error-primary": "#E26D5C",
+    "--dsw-alias-state-error-secondary": "#E26D5C",
+    "--dsw-alias-state-success-primary": "#A8D34A",
+    "--dsw-alias-state-success-secondary": "#7DBE4C",
+    "--dsw-alias-state-success-tertiary": "#232B16",
+    "--dsw-alias-state-warn-primary": "#E8A13A",
+    "--dsw-alias-state-warn-secondary": "#E8A13A",
+    "--dsw-alias-state-warn-tertiary": "#33280F",
+    "--dsw-alias-state-warn-label": "#F0B44A",
+    # Markdown / 代码块
+    "--dsw-alias-markdown-code-block": "#1E1812",
+    "--dsw-alias-markdown-code-block-banner": "#251E16",
+    "--dsw-alias-markdown-inline-code": "#2A231A",
+    "--dsw-alias-markdown-code-segment-selected": "#2A231A",
+    "--dsw-alias-markdown-code-segment-unselected": "#1E1812",
+    "--dsw-alias-markdown-citation": "#2A231A",
+    "--dsw-alias-markdown-tag": "#2A231A",
+    "--dsw-alias-markdown-placeholder": "#221C15",
+    # 滚动条 / 浮层
+    "--dsw-alias-scrollbar-bg-l1": "#3B3123",
+    "--dsw-alias-scrollbar-bg-l2": "#3B3123",
+    "--dsw-alias-scrollbar-hover-l1": "#574830",
+    "--dsw-alias-scrollbar-hover-l2": "#574830",
+    "--dsw-alias-toast-bg": "#FFE7B3",
+    "--dsw-alias-tooltip-bg": "#3E3325",
+    # 组件专属
+    "--dsw-specific-sidebar-fill": "#120F0B",
+    "--dsw-specific-sidebar-nav-item-active": "#2A231A",
+    "--dsw-specific-sidebar-nav-item-active-accent": "#F2B01E",
+    "--dsw-specific-sidebar-nav-item-hover": "#1E1812",
+    "--dsw-specific-input-major": "#1E1812",
+    "--dsw-specific-login-input": "#1E1812",
+    "--dsw-specific-menu": "#241D16",
+    "--dsw-specific-selector": "#2A231A",
+    "--dsw-specific-tip": "#241E15",
+    "--dsw-specific-bubble": "#2A231A",
+    "--dsw-specific-bubble-highlight": "#362D21",
+    # 阴影
+    "--dsw-shadow-lv1": "0 2px 4px 0 rgba(8, 6, 4, .3)",
+    "--dsw-shadow-lv1-blur": "0 4px 12px 0 rgba(8, 6, 4, .2)",
+    "--dsw-shadow-lv2": "0 4px 12px 0 rgba(8, 6, 4, .25), 0 2px 8px 0 rgba(8, 6, 4, .3)",
+    "--dsw-shadow-lv3": "0 0 1px 0 rgba(8, 6, 4, .5), 0 0 4px 0 rgba(8, 6, 4, .2), 0 12px 32px 0 rgba(8, 6, 4, .45)",
+    # 字体
+    "--dsw-font-family": '"SF Pro Rounded", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+    # 思考块渐变
+    "--dsw-linear-gradient-think": "linear-gradient(180deg, #1E1812 20.19%, rgba(30, 24, 18, 0) 100%)",
+    "--dsw-linear-think-select": "linear-gradient(180deg, #251E16 20.19%, rgba(37, 30, 22, 0) 100%)",
+}
+
+
+def render_themes() -> str:
+    def theme(id_: str, scheme: str, tokens: dict) -> str:
+        body = ",\n".join(f"      {json.dumps(k)}: {json.dumps(v)}" for k, v in sorted(tokens.items()))
+        return (
+            f"  {{\n    id: '{id_}',\n    colorScheme: '{scheme}',\n    tokens: {{\n{body},\n    }},\n  }}"
+        )
+
+    return "const LULU_THEMES = [\n" + theme("lulu-cream", "light", LULU_LIGHT) + ",\n" + theme("lulu-night", "dark", LULU_NIGHT) + ",\n]\n"
+
+
+EMBEDDED_TEMPLATE = """// 水豚噜噜 · DSH 主题皮肤（build 产物，勿手改 —— 改 scripts/build_plugin.py 后重新构建）
 // 来源 spritesheet: assets/spritesheet.webp (8x9 atlas, 192x208 cells)
 // 配色与造型由 BlueAI 视觉模型基于真实帧取色校准（2026-08）。
+// 主题覆盖 DSH 全量 --dsw-* 别名令牌：按钮五大家族 / 输入框 / 消息气泡 / 菜单 / 滚动条 / 阴影 / 圆体字。
 
 const LULU_IDLE = [__IDLE__]
 
@@ -28,46 +289,7 @@ const LULU_WAVE = [__WAVE__]
 const IDLE_DUR = [280, 110, 110, 140, 140, 320]
 const WAVE_DUR = [140, 140, 140, 280]
 
-const LULU_THEMES = [
-  {
-    id: 'lulu-cream',
-    colorScheme: 'light',
-    tokens: {
-      '--dsw-alias-bg-base': '#FFF7E6',
-      '--dsw-alias-bg-layer-1': '#FFFCF4',
-      '--dsw-alias-bg-layer-2': '#F9EED6',
-      '--dsw-alias-bg-overlay': '#FFFDF8',
-      '--dsw-alias-border-l1': '#EFE0C4',
-      '--dsw-alias-border-l2': '#DFC896',
-      '--dsw-alias-brand-primary': '#E8820F',
-      '--dsw-alias-label-primary': '#2B2118',
-      '--dsw-alias-label-secondary': '#6E5D49',
-      '--dsw-alias-state-error-primary': '#C94F3D',
-      '--dsw-alias-state-success-primary': '#5FA82C',
-      '--dsw-alias-state-warn-primary': '#D98E1F',
-      '--dsw-specific-sidebar-fill': '#FAF0DC',
-    },
-  },
-  {
-    id: 'lulu-night',
-    colorScheme: 'dark',
-    tokens: {
-      '--dsw-alias-bg-base': '#171310',
-      '--dsw-alias-bg-layer-1': '#221C15',
-      '--dsw-alias-bg-layer-2': '#2C241B',
-      '--dsw-alias-bg-overlay': '#2A231A',
-      '--dsw-alias-border-l1': '#3B3226',
-      '--dsw-alias-border-l2': '#5A4C38',
-      '--dsw-alias-brand-primary': '#F2B01E',
-      '--dsw-alias-label-primary': '#FFF1D0',
-      '--dsw-alias-label-secondary': '#B4A389',
-      '--dsw-alias-state-error-primary': '#E26D5C',
-      '--dsw-alias-state-success-primary': '#A8D34A',
-      '--dsw-alias-state-warn-primary': '#E8A13A',
-      '--dsw-specific-sidebar-fill': '#120F0B',
-    },
-  },
-]
+__LULU_THEMES__
 
 const LULU_CSS = [
   '.lulu-pet { position: fixed; width: 108px; z-index: 2147483000; cursor: grab; user-select: none; -webkit-user-select: none; pointer-events: auto; filter: drop-shadow(0 6px 12px rgba(43, 33, 24, 0.28)); }',
@@ -80,20 +302,22 @@ const LULU_CSS = [
   '@keyframes lulu-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }',
   '.lulu-settings { display: flex; flex-direction: column; gap: 18px; padding: 10px 6px; color: var(--dsw-alias-label-primary); font-size: 13px; }',
   '.lulu-settings h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--dsw-alias-label-secondary); text-transform: uppercase; }',
-  '.lulu-hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 14px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); }',
+  '.lulu-hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 16px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2); }',
   '.lulu-hero img { width: 76px; height: auto; animation: lulu-bob 3.6s ease-in-out infinite; }',
+  '.lulu-hero-placeholder { font-size: 44px; animation: lulu-bob 3.6s ease-in-out infinite; }',
   '.lulu-hero-title { font-weight: 600; font-size: 14px; }',
   '.lulu-hero-desc { margin-top: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }',
   '.lulu-theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }',
-  '.lulu-theme-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 10px; background: var(--dsw-alias-bg-layer-1); cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }',
-  '.lulu-theme-card:hover { border-color: var(--dsw-alias-brand-primary); }',
-  '.lulu-theme-card.active { border-color: var(--dsw-alias-brand-primary); box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
-  '.lulu-theme-swatch { width: 100%; height: 14px; border-radius: 6px; margin-bottom: 8px; border: 1px solid var(--dsw-alias-border-l1); }',
+  '.lulu-theme-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 10px; background: var(--dsw-alias-bg-layer-1); cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }',
+  '.lulu-theme-card:hover { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); transform: translateY(-1px); }',
+  '.lulu-theme-card.active { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary-new-colorprimary-new-color); }',
+  '.lulu-theme-swatch { width: 100%; height: 14px; border-radius: 7px; margin-bottom: 8px; border: 1px solid var(--dsw-alias-border-l1); }',
   '.lulu-theme-name { font-weight: 600; font-size: 13px; }',
   '.lulu-theme-desc { margin-top: 2px; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lulu-row { display: flex; gap: 8px; flex-wrap: wrap; }',
-  '.lulu-btn { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; transition: border-color 0.15s; }',
-  '.lulu-btn:hover { border-color: var(--dsw-alias-brand-primary); }',
+  '.lulu-btn { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 999px; padding: 7px 14px; font-size: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.15s; }',
+  '.lulu-btn:hover { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); background: var(--dsw-alias-button-ghost-active-fill); transform: translateY(-1px); }',
+  '::selection { background: rgba(242, 176, 30, 0.35); }',
 ].join('\\n')
 
 function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
@@ -174,7 +398,7 @@ function LuluSettings(props) {
     return function () { offTheme(); offPet() }
   }, [])
   const choices = [
-    { id: 'lulu-cream', name: '噜噜 · 奶油咖啡', desc: '暖奶油底 + 橘子橙', swatch: 'linear-gradient(90deg, #FFF7E6 62%, #E8820F 38%)' },
+    { id: 'lulu-cream', name: '噜噜 · 奶油咖啡', desc: '暖奶油底 + 橘子橙', swatch: 'linear-gradient(90deg, #FFF7E6 62%, #C96A0B 38%)' },
     { id: 'lulu-night', name: '噜噜 · 暖夜', desc: '近黑暖棕夜底 + 亮橘点缀', swatch: 'linear-gradient(90deg, #171310 62%, #F2B01E 38%)' },
     { id: 'light', name: '原版 · 浅色', desc: 'DSH 内置浅色', swatch: 'linear-gradient(90deg, #F7F7F8 62%, #4E6EF2 38%)' },
     { id: 'dark', name: '原版 · 深色', desc: 'DSH 内置深色', swatch: 'linear-gradient(90deg, #1F2023 62%, #4E6EF2 38%)' },
@@ -197,7 +421,7 @@ function LuluSettings(props) {
     React.createElement(
       'div',
       null,
-      React.createElement('h3', null, '主题切换'),
+      React.createElement('h3', null, '🍊 主题切换'),
       React.createElement(
         'div',
         { className: 'lulu-theme-grid' },
@@ -221,7 +445,7 @@ function LuluSettings(props) {
     React.createElement(
       'div',
       null,
-      React.createElement('h3', null, '桌面宠物'),
+      React.createElement('h3', null, '🐾 桌面宠物'),
       React.createElement(
         'div',
         { className: 'lulu-row' },
@@ -324,50 +548,12 @@ return {
 
 RUNTIME_CLIENT = """// 水豚噜噜 · 运行时 Client 半边：帧经 host.call('lulu-frames') 加载。
 // 分发请优先用 plugin/client.js（内嵌帧，单文件）；本变体用于本机快速安装。
+// 主题覆盖 DSH 全量 --dsw-* 别名令牌。
 
 const IDLE_DUR = [280, 110, 110, 140, 140, 320]
 const WAVE_DUR = [140, 140, 140, 280]
 
-const LULU_THEMES = [
-  {
-    id: 'lulu-cream',
-    colorScheme: 'light',
-    tokens: {
-      '--dsw-alias-bg-base': '#FFF7E6',
-      '--dsw-alias-bg-layer-1': '#FFFCF4',
-      '--dsw-alias-bg-layer-2': '#F9EED6',
-      '--dsw-alias-bg-overlay': '#FFFDF8',
-      '--dsw-alias-border-l1': '#EFE0C4',
-      '--dsw-alias-border-l2': '#DFC896',
-      '--dsw-alias-brand-primary': '#E8820F',
-      '--dsw-alias-label-primary': '#2B2118',
-      '--dsw-alias-label-secondary': '#6E5D49',
-      '--dsw-alias-state-error-primary': '#C94F3D',
-      '--dsw-alias-state-success-primary': '#5FA82C',
-      '--dsw-alias-state-warn-primary': '#D98E1F',
-      '--dsw-specific-sidebar-fill': '#FAF0DC',
-    },
-  },
-  {
-    id: 'lulu-night',
-    colorScheme: 'dark',
-    tokens: {
-      '--dsw-alias-bg-base': '#171310',
-      '--dsw-alias-bg-layer-1': '#221C15',
-      '--dsw-alias-bg-layer-2': '#2C241B',
-      '--dsw-alias-bg-overlay': '#2A231A',
-      '--dsw-alias-border-l1': '#3B3226',
-      '--dsw-alias-border-l2': '#5A4C38',
-      '--dsw-alias-brand-primary': '#F2B01E',
-      '--dsw-alias-label-primary': '#FFF1D0',
-      '--dsw-alias-label-secondary': '#B4A389',
-      '--dsw-alias-state-error-primary': '#E26D5C',
-      '--dsw-alias-state-success-primary': '#A8D34A',
-      '--dsw-alias-state-warn-primary': '#E8A13A',
-      '--dsw-specific-sidebar-fill': '#120F0B',
-    },
-  },
-]
+__LULU_THEMES__
 
 const LULU_CSS = [
   '.lulu-pet { position: fixed; width: 108px; z-index: 2147483000; cursor: grab; user-select: none; -webkit-user-select: none; pointer-events: auto; filter: drop-shadow(0 6px 12px rgba(43, 33, 24, 0.28)); }',
@@ -380,21 +566,22 @@ const LULU_CSS = [
   '@keyframes lulu-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }',
   '.lulu-settings { display: flex; flex-direction: column; gap: 18px; padding: 10px 6px; color: var(--dsw-alias-label-primary); font-size: 13px; }',
   '.lulu-settings h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--dsw-alias-label-secondary); text-transform: uppercase; }',
-  '.lulu-hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 14px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); }',
+  '.lulu-hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 16px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2); }',
   '.lulu-hero img { width: 76px; height: auto; animation: lulu-bob 3.6s ease-in-out infinite; }',
   '.lulu-hero-placeholder { font-size: 44px; animation: lulu-bob 3.6s ease-in-out infinite; }',
   '.lulu-hero-title { font-weight: 600; font-size: 14px; }',
   '.lulu-hero-desc { margin-top: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }',
   '.lulu-theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }',
-  '.lulu-theme-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 10px; background: var(--dsw-alias-bg-layer-1); cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }',
-  '.lulu-theme-card:hover { border-color: var(--dsw-alias-brand-primary); }',
-  '.lulu-theme-card.active { border-color: var(--dsw-alias-brand-primary); box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
-  '.lulu-theme-swatch { width: 100%; height: 14px; border-radius: 6px; margin-bottom: 8px; border: 1px solid var(--dsw-alias-border-l1); }',
+  '.lulu-theme-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 10px; background: var(--dsw-alias-bg-layer-1); cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }',
+  '.lulu-theme-card:hover { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); transform: translateY(-1px); }',
+  '.lulu-theme-card.active { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary-new-colorprimary-new-color); }',
+  '.lulu-theme-swatch { width: 100%; height: 14px; border-radius: 7px; margin-bottom: 8px; border: 1px solid var(--dsw-alias-border-l1); }',
   '.lulu-theme-name { font-weight: 600; font-size: 13px; }',
   '.lulu-theme-desc { margin-top: 2px; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lulu-row { display: flex; gap: 8px; flex-wrap: wrap; }',
-  '.lulu-btn { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; transition: border-color 0.15s; }',
-  '.lulu-btn:hover { border-color: var(--dsw-alias-brand-primary); }',
+  '.lulu-btn { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 999px; padding: 7px 14px; font-size: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.15s; }',
+  '.lulu-btn:hover { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); background: var(--dsw-alias-button-ghost-active-fill); transform: translateY(-1px); }',
+  '::selection { background: rgba(242, 176, 30, 0.35); }',
 ].join('\\n')
 
 function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
@@ -483,7 +670,7 @@ function LuluSettings(props) {
   }, [])
   const hero = pet.frames !== null ? pet.frames.idle[0] : null
   const choices = [
-    { id: 'lulu-cream', name: '噜噜 · 奶油咖啡', desc: '暖奶油底 + 橘子橙', swatch: 'linear-gradient(90deg, #FFF7E6 62%, #E8820F 38%)' },
+    { id: 'lulu-cream', name: '噜噜 · 奶油咖啡', desc: '暖奶油底 + 橘子橙', swatch: 'linear-gradient(90deg, #FFF7E6 62%, #C96A0B 38%)' },
     { id: 'lulu-night', name: '噜噜 · 暖夜', desc: '近黑暖棕夜底 + 亮橘点缀', swatch: 'linear-gradient(90deg, #171310 62%, #F2B01E 38%)' },
     { id: 'light', name: '原版 · 浅色', desc: 'DSH 内置浅色', swatch: 'linear-gradient(90deg, #F7F7F8 62%, #4E6EF2 38%)' },
     { id: 'dark', name: '原版 · 深色', desc: 'DSH 内置深色', swatch: 'linear-gradient(90deg, #1F2023 62%, #4E6EF2 38%)' },
@@ -508,7 +695,7 @@ function LuluSettings(props) {
     React.createElement(
       'div',
       null,
-      React.createElement('h3', null, '主题切换'),
+      React.createElement('h3', null, '🍊 主题切换'),
       React.createElement(
         'div',
         { className: 'lulu-theme-grid' },
@@ -532,7 +719,7 @@ function LuluSettings(props) {
     React.createElement(
       'div',
       null,
-      React.createElement('h3', null, '桌面宠物'),
+      React.createElement('h3', null, '🐾 桌面宠物'),
       React.createElement(
         'div',
         { className: 'lulu-row' },
@@ -597,17 +784,19 @@ def main() -> int:
 
     idle_js = ",\n  ".join(data_uri(p) for p in idle)
     wave_js = ",\n  ".join(data_uri(p) for p in wave)
+    themes_js = render_themes()
     PLUGIN.mkdir(parents=True, exist_ok=True)
 
-    embedded = EMBEDDED.replace("__IDLE__", idle_js).replace("__WAVE__", wave_js)
+    embedded = EMBEDDED_TEMPLATE.replace("__IDLE__", idle_js).replace("__WAVE__", wave_js).replace("__LULU_THEMES__", themes_js)
+    runtime_client = RUNTIME_CLIENT.replace("__LULU_THEMES__", themes_js)
     (PLUGIN / "client.js").write_text(embedded)
     (PLUGIN / "runtime.host.js").write_text(RUNTIME_HOST)
-    (PLUGIN / "runtime.client.js").write_text(RUNTIME_CLIENT)
+    (PLUGIN / "runtime.client.js").write_text(runtime_client)
 
-    total = sum(p.stat().st_size for p in idle + wave)
-    print(f"plugin/client.js       ({embedded.__len__() / 1024:.0f} KiB, frames {total / 1024:.0f} KiB raw)")
-    print(f"plugin/runtime.host.js ({len(RUNTIME_HOST) / 1024:.1f} KiB)")
-    print(f"plugin/runtime.client.js ({len(RUNTIME_CLIENT) / 1024:.1f} KiB)")
+    print(f"plugin/client.js        ({len(embedded) / 1024:.0f} KiB)")
+    print(f"plugin/runtime.host.js  ({len(RUNTIME_HOST) / 1024:.1f} KiB)")
+    print(f"plugin/runtime.client.js ({len(runtime_client) / 1024:.1f} KiB)")
+    print(f"tokens: light={len(LULU_LIGHT)} dark={len(LULU_NIGHT)}")
     return 0
 
 

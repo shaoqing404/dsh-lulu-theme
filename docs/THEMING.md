@@ -13,38 +13,38 @@
 | `#5FA82C` / `#A8D34A` | 橘子叶 / 待机手里的小风扇（绿） |
 | `#2B2118` | 眼睛与轮廓阴影（近黑深棕） |
 
-## 两套主题的 token 映射
+## 不是只换 13 个颜色：全量令牌换装
 
-皮肤通过 `theme.register()` 注册主题，覆盖 DSH 的 13 个 `--dsw-alias-*` 令牌：
+皮肤通过 `theme.register()` 注册主题，每套主题覆盖 **107 个 `--dsw-*` 令牌**（从 DSH `body` 样式表全量枚举），
+包括 13 个官方可检查令牌之外的组件级令牌：
 
-### 噜噜·奶油咖啡（light）
-
-| Token | 值 | 含义 |
+| 组件区域 | 覆盖的令牌 | 噜噜化处理 |
 | --- | --- | --- |
-| bg-base | `#FFF7E6` | 暖奶油底 |
-| bg-layer-1/2 | `#FFFCF4` / `#F9EED6` | 层级表面 |
-| bg-overlay | `#FFFDF8` | 浮层 |
-| border-l1/l2 | `#EFE0C4` / `#DFC896` | 描边 |
-| brand-primary | `#E8820F` | 品牌强调（深橘，保证对比度） |
-| label-primary/secondary | `#2B2118` / `#6E5D49` | 正文 / 次级文字（深棕代替纯黑） |
-| state-error/success/warn | `#C94F3D` / `#5FA82C` / `#D98E1F` | 状态色（叶绿=成功） |
-| sidebar-fill | `#FAF0DC` | 侧栏底色 |
+| 按钮（五大家族） | `button-primary-fill/hover`、`button-info-*`、`button-ghost-active-*`、`button-floating-*`、`button-tool-bar-*`、`button-contrast-fill` | 主按钮=眼睛同款近黑深棕；信息按钮=橘子橙 `#C96A0B`；幽灵/浮动按钮=奶油底 |
+| 链接/焦点/业务色 | `state-business-primary`（135 处引用） | DeepSeek 蓝 → 橘子橙（浅色 `#C96A0B` / 深色 `#F2B01E`） |
+| 悬停/按下洗染 | `interactive-bg-hover/active/accent/solid/danger` | 全部换成橙色暖洗染 |
+| 输入框/编写器 | `specific-input-major`、`login-input`、`select/selector` | 暖奶油内凹底 + 暖棕描边 |
+| 消息气泡 | `specific-bubble/highlight` | 奶油气泡（浅色）/ 暖棕气泡（深色） |
+| 侧栏 | `specific-sidebar-fill`、`nav-item-active/hover`、`active-accent` | 奶油侧栏 + 橘子橙选中条 |
+| 菜单/弹层 | `specific-menu`、`bg-overlay`、`border-inverted` | 暖底 + 暖棕描边 |
+| Markdown/代码块 | `markdown-code-block/banner/inline-code/citation/tag` | 奶油代码底（浅色）/ 暖棕（深色） |
+| 滚动条 | `scrollbar-bg/hover-l1/l2` | 奶油/暖棕，hover 加深 |
+| 阴影 | `shadow-lv1/2/3` | 黑阴影 → 暖棕阴影 |
+| 字体 | `font-family` | SF Pro Rounded 圆体字优先（噜噜的圆润感） |
+| 状态色 | `state-error/success/warn-*` | 成功=橘子叶绿，警告=琥珀橘 |
+| 文本 | `label-primary/secondary/tertiary/caption/dimmed/…` | 纯黑 → 深棕 `#2B2118`，层级用暖灰棕 |
 
-### 噜噜·暖夜（dark）
+## 两套主题速览
 
-| Token | 值 | 含义 |
+| | 噜噜 · 奶油咖啡（light） | 噜噜 · 暖夜（dark） |
 | --- | --- | --- |
-| bg-base | `#171310` | 近黑暖棕夜底（沿用 spritesheet 底色体系） |
-| bg-layer-1/2 | `#221C15` / `#2C241B` | 层级表面 |
-| border-l1/l2 | `#3B3226` / `#5A4C38` | 描边 |
-| brand-primary | `#F2B01E` | 亮橘强调 |
-| label-primary/secondary | `#FFF1D0` / `#B4A389` | 暖奶油文字 |
-| state-* | `#E26D5C` / `#A8D34A` / `#E8A13A` | 状态色 |
-| sidebar-fill | `#120F0B` | 侧栏更深一档 |
+| 底色 | `#FFF7E6` 暖奶油 | `#171310` 近黑暖棕 |
+| 强调 | `#C96A0B` 橘子橙 | `#F2B01E` 亮橘 |
+| 正文 | `#2B2118` 深棕 | `#FFF1D0` 暖奶油 |
 
 ## 怎么改
 
-改 `scripts/build_plugin.py` 里 `LULU_THEMES` 的 tokens，然后：
+改 `scripts/build_plugin.py` 里的 `LULU_LIGHT` / `LULU_NIGHT` 两个字典（每个 107 个令牌），然后：
 
 ```bash
 uv run --with pillow python scripts/build_plugin.py
