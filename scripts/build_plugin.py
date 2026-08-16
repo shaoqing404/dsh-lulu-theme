@@ -500,6 +500,11 @@ const FRAME_DIRS = [
   '/Users/mac/dsh-lulu-theme/assets/frames/small',
   '/Users/mac/.dsh/skins/lulu-theme/assets/frames/small',
 ]
+const ART_DIRS = [
+  '/Users/mac/Developer/element_workspace/dsh-lulu-theme/assets/hd',
+  '/Users/mac/dsh-lulu-theme/assets/hd',
+  '/Users/mac/.dsh/skins/lulu-theme/assets/hd',
+]
 const FRAME_NAMES = {
   idle: ['idle-0', 'idle-1', 'idle-2', 'idle-3', 'idle-4', 'idle-5'],
   wave: ['wave-0', 'wave-1', 'wave-2', 'wave-3'],
@@ -541,6 +546,24 @@ return {
         }
       }
       return { ok: false, error: 'lulu frames not found in any candidate dir' }
+    })
+    harness.handle('lulu-art', async function () {
+      for (const dir of ART_DIRS) {
+        try {
+          const banner = await fs.resolve(dir + '/lulu-banner.webp')
+          const portrait = await fs.resolve(dir + '/lulu-portrait.webp')
+          const bb = await fs.readBytes(banner, undefined, 4194304)
+          const pp = await fs.readBytes(portrait, undefined, 4194304)
+          return {
+            ok: true,
+            banner: 'data:image/webp;base64,' + bytesToBase64(bb),
+            portrait: 'data:image/webp;base64,' + bytesToBase64(pp),
+          }
+        } catch (err) {
+          // 尝试下一个候选目录
+        }
+      }
+      return { ok: false, error: 'lulu art not found in any candidate dir' }
     })
   },
 }
@@ -789,6 +812,63 @@ def main() -> int:
 
     embedded = EMBEDDED_TEMPLATE.replace("__IDLE__", idle_js).replace("__WAVE__", wave_js).replace("__LULU_THEMES__", themes_js)
     runtime_client = RUNTIME_CLIENT.replace("__LULU_THEMES__", themes_js)
+
+    # ---- 运行时变体专属装配：噜噜画廊（HD 插画经 host.call('lulu-art') 加载） ----
+    gallery_css_lines = [
+        '.lulu-gallery-banner { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2); }',
+        '.lulu-gallery-row { display: flex; gap: 12px; align-items: center; margin-top: 10px; }',
+        '.lulu-gallery-portrait { width: 76px; height: 76px; object-fit: cover; border-radius: 50%; border: 2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color); box-shadow: var(--dsw-shadow-lv2); }',
+        '.lulu-gallery-note { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }',
+    ]
+    gallery_css = "".join(f"  '{line}',\n" for line in gallery_css_lines)
+    anchor_css = "  '::selection { background: rgba(242, 176, 30, 0.35); }',"
+    assert runtime_client.count(anchor_css) == 1, "gallery css anchor not unique"
+    runtime_client = runtime_client.replace(anchor_css, gallery_css + anchor_css)
+
+    anchor_hero = "  const hero = pet.frames !== null ? pet.frames.idle[0] : null\n"
+    assert runtime_client.count(anchor_hero) == 1, "hero anchor not unique"
+    runtime_client = runtime_client.replace(
+        anchor_hero,
+        anchor_hero + "  const art = pet.art !== undefined && pet.art !== null ? pet.art : null\n",
+    )
+
+    gallery_section = (
+        "    React.createElement(\n"
+        "      'div',\n"
+        "      null,\n"
+        "      React.createElement('h3', null, '🖼️ 噜噜画廊'),\n"
+        "      art !== null ? React.createElement(\n"
+        "        'div',\n"
+        "        null,\n"
+        "        React.createElement('img', { className: 'lulu-gallery-banner', src: art.banner, alt: '水豚噜噜插画' }),\n"
+        "        React.createElement(\n"
+        "          'div',\n"
+        "          { className: 'lulu-gallery-row' },\n"
+        "          React.createElement('img', { className: 'lulu-gallery-portrait', src: art.portrait, alt: '水豚噜噜头像' }),\n"
+        "          React.createElement('div', { className: 'lulu-gallery-note' }, 'BlueAI 原创噜噜插画 · 随皮肤仓库分发'),\n"
+        "        ),\n"
+        "      ) : React.createElement('div', { className: 'lulu-gallery-note' }, '高清插画需皮肤仓库素材（运行时变体）：构建后放入 assets/hd/'),\n"
+        "    ),\n"
+        "      React.createElement('h3', null, '🐾 桌面宠物'),"
+    )
+    anchor_pet_h3 = "      React.createElement('h3', null, '🐾 桌面宠物'),"
+    assert runtime_client.count(anchor_pet_h3) == 1, "pet h3 anchor not unique"
+    runtime_client = runtime_client.replace(anchor_pet_h3, gallery_section)
+
+    anchor_art_call = (
+        "    host.call('lulu-frames', {}).then(function (res) {\n"
+        "      if (res !== null && res !== undefined && res.ok === true) store.set({ frames: res.frames })\n"
+        "    })"
+    )
+    assert runtime_client.count(anchor_art_call) == 1, "frames call anchor not unique"
+    runtime_client = runtime_client.replace(
+        anchor_art_call,
+        anchor_art_call
+        + "\n    host.call('lulu-art', {}).then(function (res) {\n"
+        + "      if (res !== null && res !== undefined && res.ok === true) store.set({ art: res })\n"
+        + "    })",
+    )
+
     (PLUGIN / "client.js").write_text(embedded)
     (PLUGIN / "runtime.host.js").write_text(RUNTIME_HOST)
     (PLUGIN / "runtime.client.js").write_text(runtime_client)

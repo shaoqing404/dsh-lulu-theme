@@ -6,6 +6,11 @@ const FRAME_DIRS = [
   '/Users/mac/dsh-lulu-theme/assets/frames/small',
   '/Users/mac/.dsh/skins/lulu-theme/assets/frames/small',
 ]
+const ART_DIRS = [
+  '/Users/mac/Developer/element_workspace/dsh-lulu-theme/assets/hd',
+  '/Users/mac/dsh-lulu-theme/assets/hd',
+  '/Users/mac/.dsh/skins/lulu-theme/assets/hd',
+]
 const FRAME_NAMES = {
   idle: ['idle-0', 'idle-1', 'idle-2', 'idle-3', 'idle-4', 'idle-5'],
   wave: ['wave-0', 'wave-1', 'wave-2', 'wave-3'],
@@ -47,6 +52,24 @@ return {
         }
       }
       return { ok: false, error: 'lulu frames not found in any candidate dir' }
+    })
+    harness.handle('lulu-art', async function () {
+      for (const dir of ART_DIRS) {
+        try {
+          const banner = await fs.resolve(dir + '/lulu-banner.webp')
+          const portrait = await fs.resolve(dir + '/lulu-portrait.webp')
+          const bb = await fs.readBytes(banner, undefined, 4194304)
+          const pp = await fs.readBytes(portrait, undefined, 4194304)
+          return {
+            ok: true,
+            banner: 'data:image/webp;base64,' + bytesToBase64(bb),
+            portrait: 'data:image/webp;base64,' + bytesToBase64(pp),
+          }
+        } catch (err) {
+          // 尝试下一个候选目录
+        }
+      }
+      return { ok: false, error: 'lulu art not found in any candidate dir' }
     })
   },
 }

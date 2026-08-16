@@ -261,6 +261,10 @@ const LULU_CSS = [
   '.lulu-row { display: flex; gap: 8px; flex-wrap: wrap; }',
   '.lulu-btn { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-radius: 999px; padding: 7px 14px; font-size: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.15s; }',
   '.lulu-btn:hover { border-color: var(--dsw-alias-brand-primary-new-colorprimary-new-color); background: var(--dsw-alias-button-ghost-active-fill); transform: translateY(-1px); }',
+  '.lulu-gallery-banner { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--dsw-alias-border-l1); box-shadow: var(--dsw-shadow-lv2); }',
+  '.lulu-gallery-row { display: flex; gap: 12px; align-items: center; margin-top: 10px; }',
+  '.lulu-gallery-portrait { width: 76px; height: 76px; object-fit: cover; border-radius: 50%; border: 2px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color); box-shadow: var(--dsw-shadow-lv2); }',
+  '.lulu-gallery-note { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }',
   '::selection { background: rgba(242, 176, 30, 0.35); }',
 ].join('\n')
 
@@ -349,6 +353,7 @@ function LuluSettings(props) {
     return function () { offTheme(); offPet() }
   }, [])
   const hero = pet.frames !== null ? pet.frames.idle[0] : null
+  const art = pet.art !== undefined && pet.art !== null ? pet.art : null
   const choices = [
     { id: 'lulu-cream', name: '噜噜 · 奶油咖啡', desc: '暖奶油底 + 橘子橙', swatch: 'linear-gradient(90deg, #FFF7E6 62%, #C96A0B 38%)' },
     { id: 'lulu-night', name: '噜噜 · 暖夜', desc: '近黑暖棕夜底 + 亮橘点缀', swatch: 'linear-gradient(90deg, #171310 62%, #F2B01E 38%)' },
@@ -399,6 +404,22 @@ function LuluSettings(props) {
     React.createElement(
       'div',
       null,
+    React.createElement(
+      'div',
+      null,
+      React.createElement('h3', null, '🖼️ 噜噜画廊'),
+      art !== null ? React.createElement(
+        'div',
+        null,
+        React.createElement('img', { className: 'lulu-gallery-banner', src: art.banner, alt: '水豚噜噜插画' }),
+        React.createElement(
+          'div',
+          { className: 'lulu-gallery-row' },
+          React.createElement('img', { className: 'lulu-gallery-portrait', src: art.portrait, alt: '水豚噜噜头像' }),
+          React.createElement('div', { className: 'lulu-gallery-note' }, 'BlueAI 原创噜噜插画 · 随皮肤仓库分发'),
+        ),
+      ) : React.createElement('div', { className: 'lulu-gallery-note' }, '高清插画需皮肤仓库素材（运行时变体）：构建后放入 assets/hd/'),
+    ),
       React.createElement('h3', null, '🐾 桌面宠物'),
       React.createElement(
         'div',
@@ -429,6 +450,9 @@ return {
     const store = createPetStore()
     host.call('lulu-frames', {}).then(function (res) {
       if (res !== null && res !== undefined && res.ok === true) store.set({ frames: res.frames })
+    })
+    host.call('lulu-art', {}).then(function (res) {
+      if (res !== null && res !== undefined && res.ok === true) store.set({ art: res })
     })
     const onThemeChange = function (fn) { return ctx.on('theme/change', fn) }
 
